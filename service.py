@@ -1,4 +1,5 @@
 import os
+import random
 import subprocess
 from typing import AsyncGenerator, Optional
 
@@ -74,23 +75,22 @@ class TRTLLM:
         prompt: str = "Explain superconductors in plain English",
         system_prompt: Optional[str] = SYSTEM_PROMPT,
         max_tokens: Annotated[int, Ge(128), Le(MAX_TOKENS)] = MAX_TOKENS,
-    ) -> str:
+    ) -> AsyncGenerator[str, None]:
 
         from trtllm_client import run_inference
-        import tritonclient.grpc.aio as grpcclient
-        client = grpcclient.InferenceServerClient(url="localhost:8001")
-
+        import tritonclient.grpc as grpcclient
         if system_prompt is None:
             system_prompt = SYSTEM_PROMPT
         prompt = PROMPT_TEMPLATE.format(user_prompt=prompt, system_prompt=system_prompt)
 
-        txt = await run_inference(
-            client, prompt, output_len=max_tokens,
+        client = grpcclient.InferenceServerClient("localhost:8001")
+
+        async for response in run_inference(
+            client, prompt, output_len=max_tokens, request_id=str(random.randint(1, 9999999)),
             repetition_penalty=None, presence_penalty=None, frequency_penalty=None,
             temperature=1.0, stop_words=self.stop_tokens, bad_words=None, embedding_bias_words=None,
-            embedding_bias_weights=None, model_name="ensemble", streaming=None, beam_width=1,
+            embedding_bias_weights=None, model_name="ensemble", streaming=True, beam_width=1,
             overwrite_output_text=None, return_context_logits_data=None,
             return_generation_logits_data=None, end_id=None, pad_id=None, verbose=None,
-        )
-
-        return txt
+        ):
+            yield response
