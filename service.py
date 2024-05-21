@@ -1,14 +1,15 @@
+import json
 import os
 import random
 import subprocess
 from typing import AsyncGenerator, Optional
 
 import bentoml
+import numpy as np
+import tritonclient.grpc.aio as grpcclient
 from annotated_types import Ge, Le
+from pack_model import BENTO_MODEL_TAG
 from typing_extensions import Annotated
-
-from pack_model import BENTO_MODEL_TAG, RAW_MODEL_DIR
-
 
 MAX_TOKENS = 1024
 SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
@@ -50,24 +51,59 @@ class TRTLLM:
         ]
         self.launcher = subprocess.Popen(
             cmd + flags,
-            env = {**os.environ},
+            env={**os.environ},
             cwd=target_dir,
         )
+        self._grpc_client = None
 
-        from transformers import AutoTokenizer
+    def start_grpc_stream(self) -> grpcclient.InferenceServerClient:
+        if self._grpc_client:
+            return self._grpc_client
 
-        raw_model_dir = os.path.join(
-            self.bento_model_ref.path_of("TensorRT-LLM"), RAW_MODEL_DIR
+        self._grpc_client = grpcclient.InferenceServerClient(
+            url=f"localhost:8001", verbose=False
         )
+        return self._grpc_client
 
-        tokenizer = AutoTokenizer.from_pretrained(raw_model_dir)
-        self.stop_tokens = [
-            tokenizer.convert_ids_to_tokens(
-                tokenizer.eos_token_id,
-            ),
-            "<|eot_id|>",
+    def prepare_tensor(self, name, input):
+        from tritonclient.utils import np_to_triton_dtype
+
+        t = grpcclient.InferInput(name, input.shape, np_to_triton_dtype(input.dtype))
+        t.set_data_from_numpy(input)
+        return t
+
+    def create_request(
+        self,
+        prompt,
+        streaming,
+        request_id,
+        output_len,
+        temperature=1.0,
+    ):
+        input0 = [[prompt]]
+        input0_data = np.array(input0).astype(object)
+        output0_len = np.ones_like(input0).astype(np.int32) * output_len
+        streaming_data = np.array([[streaming]], dtype=bool)
+        temperature_data = np.array([[temperature]], dtype=np.float32)
+
+        inputs = [
+            self.prepare_tensor("text_input", input0_data),
+            self.prepare_tensor("max_tokens", output0_len),
+            self.prepare_tensor("stream", streaming_data),
+            self.prepare_tensor("temperature", temperature_data),
         ]
 
+        # Add requested outputs
+        outputs = []
+        outputs.append(grpcclient.InferRequestedOutput("text_output"))
+
+        # Issue the asynchronous sequence inference.
+        return {
+            "model_name": "ensemble",
+            "inputs": inputs,
+            "outputs": outputs,
+            "request_id": str(request_id),
+        }
 
     @bentoml.api
     async def generate(
@@ -76,21 +112,32 @@ class TRTLLM:
         system_prompt: Optional[str] = SYSTEM_PROMPT,
         max_tokens: Annotated[int, Ge(128), Le(MAX_TOKENS)] = MAX_TOKENS,
     ) -> AsyncGenerator[str, None]:
-
-        from trtllm_client import run_inference
-        import tritonclient.grpc as grpcclient
         if system_prompt is None:
             system_prompt = SYSTEM_PROMPT
         prompt = PROMPT_TEMPLATE.format(user_prompt=prompt, system_prompt=system_prompt)
 
-        client = grpcclient.InferenceServerClient("localhost:8001")
+        grpc_client_instance = self.start_grpc_stream()
 
-        async for response in run_inference(
-            client, prompt, output_len=max_tokens, request_id=str(random.randint(1, 9999999)),
-            repetition_penalty=None, presence_penalty=None, frequency_penalty=None,
-            temperature=1.0, stop_words=self.stop_tokens, bad_words=None, embedding_bias_words=None,
-            embedding_bias_weights=None, model_name="ensemble", streaming=True, beam_width=1,
-            overwrite_output_text=None, return_context_logits_data=None,
-            return_generation_logits_data=None, end_id=None, pad_id=None, verbose=None,
-        ):
-            yield response
+        async def input_generator():
+            yield self.create_request(
+                prompt,
+                streaming=True,
+                request_id=random.randint(1, 9999999),
+                output_len=max_tokens,
+            )
+
+        response_iterator = grpc_client_instance.stream_infer(
+            inputs_iterator=input_generator(),
+        )
+
+        try:
+            async for response in response_iterator:
+                result, error = response
+                if result:
+                    result = result.as_numpy("text_output")
+                    yield result[0].decode("utf-8")
+                else:
+                    yield json.dumps({"status": "error", "message": error.message()})
+
+        except grpcclient.InferenceServerException as e:
+            print(f"InferenceServerException: {e}")
