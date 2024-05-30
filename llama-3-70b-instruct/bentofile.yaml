@@ -5,9 +5,8 @@ labels:
 include:
 - "service.py"
 - "pack_model.py"
-- "trtllm_client.py"
 python:
   requirements_txt: "./requirements.txt"
   lock_packages: false
 docker:
-  base_image: "nvcr.io/nvidia/tritonserver:24.03-trtllm-python-py3"
+  base_image: "nvcr.io/nvidia/tritonserver:24.04-trtllm-python-py3"
