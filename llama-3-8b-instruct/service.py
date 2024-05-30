@@ -32,7 +32,7 @@ PROMPT_TEMPLATE = """<|begin_of_text|><|start_header_id|>system<|end_header_id|>
     },
     resources={
         "gpu": 1,
-        "gpu_type": "nvidia-l4",
+        "gpu_type": "nvidia-a100-80gb",
     },
 )
 class TRTLLM:
