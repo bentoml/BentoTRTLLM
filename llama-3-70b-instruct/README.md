@@ -22,12 +22,10 @@ Clone the project repo and TensorRT-LLM repo.
 
 ```bash
 git clone https://github.com/bentoml/BentoTRTLLM.git
-cd BentoTRTLLM/llama-3-8b-instruct
-git clone -b v0.8.0 https://github.com/NVIDIA/TensorRT-LLM.git
+cd BentoTRTLLM/llama-3-70b-instruct
+git clone -b v0.9.0 https://github.com/NVIDIA/TensorRT-LLM.git
 cd TensorRT-LLM
 ```
-
-**Note**: To deploy Llama 3 70B AWQ, go to the [llama-3-70b-instruct](./llama-3-70b-instruct/) directory.
 
 Create the base Docker environment to compile the model.
 
@@ -43,7 +41,7 @@ Install dependencies inside the Docker container. Note that TensorRT-LLM require
 apt-get update && apt-get -y install python3.10 python3-pip openmpi-bin libopenmpi-dev
 
 # Install the stable version (corresponding to the cloned branch) of TensorRT-LLM.
-pip3 install tensorrt_llm==0.8.0 -U --extra-index-url https://pypi.nvidia.com
+pip3 install tensorrt_llm==0.9.0 -U --extra-index-url https://pypi.nvidia.com
 
 # Log in to huggingface-cli
 # You can get your token from huggingface.co/settings/token
@@ -51,21 +49,23 @@ apt-get install -y git
 huggingface-cli login --token *****
 ```
 
-Build the Llama 8B model using a single GPU and BF16.
+Quantize the Llama 3 70B checkpoint into INT4 AWQ format:
 
 ```bash
-python3 examples/llama/convert_checkpoint.py --model_dir ./Meta-Llama-3-8B-Instruct \
+python3 ../quantization/quantize.py --model_dir ./Meta-Llama-3-70B-Instruct \
             --output_dir ./tllm_checkpoint_1gpu_bf16 \
-            --dtype bfloat16
+            --dtype bfloat16 \
+            --qformat int4_awq \
+            --awq_block_size 128 \
+            --calib_size 32
 
 trtllm-build --checkpoint_dir ./tllm_checkpoint_1gpu_bf16 \
-            --output_dir ./tmp/llama/8B/trt_engines/bf16/1-gpu \
+            --output_dir ./tmp/llama/70B/trt_engines/int4_AWQ/1-gpu/ \
             --gpt_attention_plugin bfloat16 \
             --gemm_plugin bfloat16 \
             --max_batch_size 64 \
             --max_input_len 512 \
-            --paged_kv_cache enable \
-            --use_paged_context_fmha enable
+            --paged_kv_cache enable
 ```
 
 The model should be successfully built now. Exit the Docker image.
@@ -78,7 +78,7 @@ Clone the `tensorrtllm_backend` repo.
 
 ```bash
 cd ..
-git clone -b v0.8.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
+git clone -b v0.9.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
 ```
 
 Now, the `BentoTRTLLM/` directory should have one `TenosrRT-LLM/` directory and one `tensorrtllm_backend/` directory.
@@ -87,13 +87,13 @@ Copy the model.
 
 ```bash
 cd tensorrtllm_backend
-cp ../TensorRT-LLM/tmp/llama/8B/trt_engines/bf16/1-gpu/* all_models/inflight_batcher_llm/tensorrt_llm/1/
+cp ../TensorRT-LLM/tmp/llama/70B/trt_engines/int4_AWQ/1-gpu/* all_models/inflight_batcher_llm/tensorrt_llm/1/
 ```
 
 Set the `tokenizer_dir` and `engine_dir` paths.
 
 ```bash
-HF_LLAMA_MODEL=TensorRT-LLM/Meta-Llama-3-8B-Instruct
+HF_LLAMA_MODEL=TensorRT-LLM/Meta-Llama-3-70B-Instruct
 ENGINE_PATH=tensorrtllm_backend/all_models/inflight_batcher_llm/tensorrt_llm/1
 
 python3 tools/fill_template.py -i all_models/inflight_batcher_llm/preprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},tokenizer_type:auto,triton_max_batch_size:64,preprocessing_instance_count:1
@@ -104,7 +104,7 @@ python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm_b
 
 python3 tools/fill_template.py -i all_models/inflight_batcher_llm/ensemble/config.pbtxt triton_max_batch_size:64
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_max_batch_size:64,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.95,exclude_input_in_output:True,enable_kv_cache_reuse:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_max_batch_size:64,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.95,exclude_input_in_output:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0
 ```
 
 ## Import the model
@@ -115,19 +115,10 @@ Install BentoML.
 pip install bentoml
 ```
 
-Make sure you are in the `llama-3-8b-instruct` directory and import the model to the BentoML Model Store.
+Make sure you are in the `llama-3-70b-instruct` directory and import the model to the BentoML Model Store.
 
 ```bash
 python pack_model.py
-```
-
-To verify it, run:
-
-```bash
-$ bentoml models list
-
-Tag                                                                           Size       Creation Time
-meta-llama--meta-llama-3-8b-instruct-trtllm-rtx4000:7eu4l2reqwohx3lu          45.80 GiB  2024-06-07 04:25:30
 ```
 
 ## Run the BentoML Service
@@ -135,7 +126,7 @@ meta-llama--meta-llama-3-8b-instruct-trtllm-rtx4000:7eu4l2reqwohx3lu          45
 We have defined a BentoML Service in `service.py`. To serve it locally, first create a Docker container environment for TensorRT-LLM:
 
 ```bash
-docker run --runtime=nvidia --gpus all -v ${PWD}:/BentoTRTLLM -v ~/bentoml:/root/bentoml -p 3000:3000 --entrypoint /bin/bash -it --workdir /BentoTRTLLM nvcr.io/nvidia/tritonserver:24.03-trtllm-python-py3
+docker run --runtime=nvidia --gpus all --volume ${PWD}:/TensorRT-LLM --entrypoint /bin/bash -it --workdir /TensorRT-LLM nvcr.io/nvidia/tritonserver:24.04-trtllm-python-py3
 ```
 
 Install the dependencies.
@@ -149,19 +140,6 @@ Start the Service.
 ```bash
 $ bentoml serve .
 2024-06-07T05:16:38+0000 [INFO] [cli] Starting production HTTP BentoServer from "service:TRTLLM" listening on http://localhost:3000 (Press CTRL+C to quit)
-I0607 05:16:39.805180 117 pinned_memory_manager.cc:275] Pinned memory pool is created at '0x7f7c64000000' with size 268435456
-I0607 05:16:39.805431 117 cuda_memory_manager.cc:107] CUDA memory pool is created on device 0 with size 67108864
-I0607 05:16:39.810192 117 model_lifecycle.cc:469] loading: postprocessing:1
-I0607 05:16:39.810243 117 model_lifecycle.cc:469] loading: preprocessing:1
-I0607 05:16:39.810385 117 model_lifecycle.cc:469] loading: tensorrt_llm:1
-I0607 05:16:39.810426 117 model_lifecycle.cc:469] loading: tensorrt_llm_bls:1
-I0607 05:16:39.841462 117 python_be.cc:2391] TRITONBACKEND_ModelInstanceInitialize: postprocessing_0_0 (CPU device 0)
-I0607 05:16:39.841462 117 python_be.cc:2391] TRITONBACKEND_ModelInstanceInitialize: preprocessing_0_0 (CPU device 0)
-[TensorRT-LLM][WARNING] gpu_device_ids is not specified, will be automatically set
-[TensorRT-LLM][WARNING] max_tokens_in_paged_kv_cache is not specified, will use default value
-[TensorRT-LLM][WARNING] batch_scheduler_policy parameter was not found or is invalid (must be max_utilization or guaranteed_no_evict)
-[TensorRT-LLM][WARNING] enable_chunked_context is not specified, will be set to false.
-...
 ```
 
 The server is now active at [http://localhost:3000](http://localhost:3000/). You can interact with it using the Swagger UI or in other different ways.
@@ -214,3 +192,20 @@ bentoml deploy .
 Once the application is up and running on BentoCloud, you can access it via the exposed URL.
 
 **Note**: For custom deployment in your own infrastructure, use [BentoML to generate an OCI-compliant image](https://docs.bentoml.com/en/latest/guides/containerization.html).
+
+
+
+
+
+
+
+
+
+# Llama-3 70B AWQ
+**NOTE: will need at least 120 GPU memory to perform the quantization**
+
+See [here](https://github.com/NVIDIA/TensorRT-LLM/blob/main/examples/quantization/README.md#preparation)
+
+This quantization step may take a long time to finish and requires large GPU memory. Please use a server grade GPU if a GPU out-of-memory error occurs
+
+If the model is trained with multi-GPU with tensor parallelism, the PTQ calibration process requires the same amount of GPUs as the training time too.
