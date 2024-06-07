@@ -12,8 +12,7 @@ See [here](https://github.com/bentoml/BentoML/tree/main/examples) for a full lis
 
 - You have installed Python 3.10+ and `pip`. See the [Python downloads page](https://www.python.org/downloads/) to learn more.
 - You have a basic understanding of key concepts in BentoML, such as Services. We recommend you read [Quickstart](https://docs.bentoml.com/en/1.2/get-started/quickstart.html) first.
-- If you want to test the Service locally, you need a Nvidia GPU with at least 20G VRAM.
-- This example uses Llama 3. Make sure you have [gained access to the model](https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct).
+- You need at least 120 GPU memory to perform the quantization for Llama 3 70B. The quantization step may take a long time to finish. Please use a server grade GPU if a GPU out-of-memory error occurs. For more information, see [TensorRT-LLM Quantization Toolkit Installation Guide](https://github.com/NVIDIA/TensorRT-LLM/blob/main/examples/quantization/README.md).
 - (Optional) We recommend you create a virtual environment for dependency isolation for this project. See the [Conda documentation](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html) or the [Python documentation](https://docs.python.org/3/library/venv.html) for details.
 
 ## Set up the environment
@@ -192,20 +191,3 @@ bentoml deploy .
 Once the application is up and running on BentoCloud, you can access it via the exposed URL.
 
 **Note**: For custom deployment in your own infrastructure, use [BentoML to generate an OCI-compliant image](https://docs.bentoml.com/en/latest/guides/containerization.html).
-
-
-
-
-
-
-
-
-
-# Llama-3 70B AWQ
-**NOTE: will need at least 120 GPU memory to perform the quantization**
-
-See [here](https://github.com/NVIDIA/TensorRT-LLM/blob/main/examples/quantization/README.md#preparation)
-
-This quantization step may take a long time to finish and requires large GPU memory. Please use a server grade GPU if a GPU out-of-memory error occurs
-
-If the model is trained with multi-GPU with tensor parallelism, the PTQ calibration process requires the same amount of GPUs as the training time too.
