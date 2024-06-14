@@ -24,7 +24,7 @@ Clone the project repo and TensorRT-LLM repo.
 ```bash
 git clone https://github.com/bentoml/BentoTRTLLM.git
 cd BentoTRTLLM/llama-3-8b-instruct
-git clone -b v0.8.0 https://github.com/NVIDIA/TensorRT-LLM.git
+git clone -b v0.9.0 https://github.com/NVIDIA/TensorRT-LLM.git
 cd TensorRT-LLM
 ```
 
@@ -44,7 +44,7 @@ Install dependencies inside the Docker container. Note that TensorRT-LLM require
 apt-get update && apt-get -y install python3.10 python3-pip openmpi-bin libopenmpi-dev
 
 # Install the stable version (corresponding to the cloned branch) of TensorRT-LLM.
-pip3 install tensorrt_llm==0.8.0 -U --extra-index-url https://pypi.nvidia.com
+pip3 install tensorrt_llm==0.9.0 -U --extra-index-url https://pypi.nvidia.com
 
 # Log in to huggingface-cli
 # You can get your token from huggingface.co/settings/token
@@ -79,7 +79,7 @@ Clone the `tensorrtllm_backend` repo.
 
 ```bash
 cd ..
-git clone -b v0.8.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
+git clone -b v0.9.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
 ```
 
 Now, the `BentoTRTLLM/` directory should have one `TenosrRT-LLM/` directory and one `tensorrtllm_backend/` directory.
@@ -136,7 +136,7 @@ meta-llama--meta-llama-3-8b-instruct-trtllm-rtx4000:7eu4l2reqwohx3lu          45
 We have defined a BentoML Service in `service.py`. To serve it locally, first create a Docker container environment for TensorRT-LLM:
 
 ```bash
-docker run --runtime=nvidia --gpus all -v ${PWD}:/BentoTRTLLM -v ~/bentoml:/root/bentoml -p 3000:3000 --entrypoint /bin/bash -it --workdir /BentoTRTLLM nvcr.io/nvidia/tritonserver:24.03-trtllm-python-py3
+docker run --runtime=nvidia --gpus all -v ${PWD}:/BentoTRTLLM -v ~/bentoml:/root/bentoml -p 3000:3000 --entrypoint /bin/bash -it --workdir /BentoTRTLLM nvcr.io/nvidia/tritonserver:24.04-trtllm-python-py3
 ```
 
 Install the dependencies.
