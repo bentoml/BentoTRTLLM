@@ -24,7 +24,7 @@ Clone the project repo and TensorRT-LLM repo.
 ```bash
 git clone https://github.com/bentoml/BentoTRTLLM.git
 cd BentoTRTLLM/llama-3-8b-instruct
-git clone -b v0.9.0 https://github.com/NVIDIA/TensorRT-LLM.git
+git clone -b v0.10.0 https://github.com/NVIDIA/TensorRT-LLM.git
 cd TensorRT-LLM
 ```
 
@@ -44,7 +44,8 @@ Install dependencies inside the Docker container. Note that TensorRT-LLM require
 apt-get update && apt-get -y install python3.10 python3-pip openmpi-bin libopenmpi-dev
 
 # Install the stable version (corresponding to the cloned branch) of TensorRT-LLM.
-pip3 install tensorrt_llm==0.9.0 -U --extra-index-url https://pypi.nvidia.com
+pip3 install tensorrt_llm==0.10.0 -U --extra-index-url https://pypi.nvidia.com
+pip3 install --force-reinstall -U --extra-index-url https://pypi.nvidia.com tensorrt-cu12==10.0.1
 
 # Log in to huggingface-cli
 # You can get your token from huggingface.co/settings/token
@@ -63,8 +64,10 @@ trtllm-build --checkpoint_dir ./tllm_checkpoint_1gpu_bf16 \
             --output_dir ./tmp/llama/8B/trt_engines/bf16/1-gpu \
             --gpt_attention_plugin bfloat16 \
             --gemm_plugin bfloat16 \
-            --max_batch_size 64 \
-            --max_input_len 512 \
+            --max_batch_size 2048 \
+            --max_input_len 2048 \
+            --max_num_tokens 2048 \
+            --multiple_profiles enable \
             --paged_kv_cache enable \
             --use_paged_context_fmha enable
 ```
@@ -79,7 +82,7 @@ Clone the `tensorrtllm_backend` repo.
 
 ```bash
 cd ..
-git clone -b v0.9.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
+git clone -b v0.10.0 https://github.com/triton-inference-server/tensorrtllm_backend.git
 ```
 
 Now, the `BentoTRTLLM/` directory should have one `TenosrRT-LLM/` directory and one `tensorrtllm_backend/` directory.
@@ -97,15 +100,15 @@ Set the `tokenizer_dir` and `engine_dir` paths.
 HF_LLAMA_MODEL=TensorRT-LLM/Meta-Llama-3-8B-Instruct
 ENGINE_PATH=tensorrtllm_backend/all_models/inflight_batcher_llm/tensorrt_llm/1
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/preprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},tokenizer_type:auto,triton_max_batch_size:64,preprocessing_instance_count:1
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/preprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},tokenizer_type:auto,triton_max_batch_size:2048,preprocessing_instance_count:1
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/postprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},tokenizer_type:auto,triton_max_batch_size:64,postprocessing_instance_count:1
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/postprocessing/config.pbtxt tokenizer_dir:${HF_LLAMA_MODEL},tokenizer_type:auto,triton_max_batch_size:2048,postprocessing_instance_count:8
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm_bls/config.pbtxt triton_max_batch_size:64,decoupled_mode:True,bls_instance_count:1,accumulate_tokens:False
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm_bls/config.pbtxt triton_max_batch_size:2048,decoupled_mode:True,bls_instance_count:1,accumulate_tokens:False
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/ensemble/config.pbtxt triton_max_batch_size:64
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/ensemble/config.pbtxt triton_max_batch_size:2048
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_max_batch_size:64,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.95,exclude_input_in_output:True,enable_kv_cache_reuse:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_max_batch_size:2048,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.9,exclude_input_in_output:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0,enable_chunked_context:True
 ```
 
 ## Import the model
@@ -136,7 +139,7 @@ meta-llama--meta-llama-3-8b-instruct-trtllm-rtx4000:7eu4l2reqwohx3lu          45
 We have defined a BentoML Service in `service.py`. To serve it locally, first create a Docker container environment for TensorRT-LLM:
 
 ```bash
-docker run --runtime=nvidia --gpus all -v ${PWD}:/BentoTRTLLM -v ~/bentoml:/root/bentoml -p 3000:3000 --entrypoint /bin/bash -it --workdir /BentoTRTLLM nvcr.io/nvidia/tritonserver:24.04-trtllm-python-py3
+docker run --runtime=nvidia --gpus all -v ${PWD}:/BentoTRTLLM -v ~/bentoml:/root/bentoml -p 3000:3000 --entrypoint /bin/bash -it --workdir /BentoTRTLLM nvcr.io/nvidia/tritonserver:24.06-trtllm-python-py3
 ```
 
 Install the dependencies.
