@@ -108,7 +108,7 @@ python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm_b
 
 python3 tools/fill_template.py -i all_models/inflight_batcher_llm/ensemble/config.pbtxt triton_max_batch_size:2048
 
-python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_max_batch_size:2048,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.9,exclude_input_in_output:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0,enable_chunked_context:True
+python3 tools/fill_template.py -i all_models/inflight_batcher_llm/tensorrt_llm/config.pbtxt triton_backend:tensorrtllm,triton_max_batch_size:2048,decoupled_mode:True,max_beam_width:1,engine_dir:${ENGINE_PATH},max_tokens_in_paged_kv_cache:,max_attention_window_size:2560,kv_cache_free_gpu_mem_fraction:0.9,exclude_input_in_output:True,batching_strategy:inflight_fused_batching,max_queue_delay_microseconds:0,enable_chunked_context:True
 ```
 
 ## Import the model
